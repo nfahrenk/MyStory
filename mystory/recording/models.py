@@ -6,13 +6,6 @@ from enum import Enum
 import heapq
 from itertools import chain
 
-'mouse': [ 'mouseover', 'mousemove', 'mouseout', 'drag', 'dragend', 'dragenter', 'dragleave', 'dragover', 'drop'],
-            'key': [ 'keydown', 'keypress', 'keyup', 'input'],
-            'res': [ 'load', 'unload', 'beforeunload', 'abort', 'error', 'resize', 'scroll', 'readystatechange' ],
-            'form': [ 'select', 'change', 'submit', 'reset', 'focus', 'blur' ],
-            'ui': [ 'DOMFocusIn', 'DOMFocusOut', 'DOMActivate', 'DOMCharacterDataModified', 'DOMNodeInserted', 'DOMNodeRemoved', 'DOMSubtreeModified' ],
-            'other': [ 'copy', 'cut', 'paste' ]
-
 class ChoiceEnum(Enum):
     @classmethod
     def choices(cls):
@@ -48,22 +41,19 @@ class SimpleEventEnum(ChoiceEnum):
 
 class Session(models.Model):
     id = models.CharField(primary_key=True, max_length=36, default=lambda : str(uuid4()))    
-    identifier = models.CharField(max_length=64, blank=True)
-    screenWidth = models.IntegerField()
-    screenHeight = models.IntegerField()
+    identifier = models.CharField(max_length=64, blank=True)    
     baseUrl = models.UrlField()
     isActive = models.BooleanField(default=True)
     isProcessed = models.BooleanField(default=False)
     timestamp = models.DateTimeField()
 
     @classmethod
-    def getInitialSeleniumInstructions(self):
+    def getInitialSeleniumInstructions(cls):
         return [
             'from selenium import webdriver',
             'from selenium.webdriver.common.keys import Keys',
             'from selenium.webdriver.common.desired_capabilities import DesiredCapabilities',
-            'driver = webdriver.Remote(command_executor="http://127.0.0.1:4444/wd/hub", desired_capabilities=DesiredCapabilities.CHROME)',
-            'driver.set_window_size(%d, %d)' % (self.screenWidth, self.screenHeight),            
+            'driver = webdriver.Remote(command_executor="http://127.0.0.1:4444/wd/hub", desired_capabilities=DesiredCapabilities.CHROME)',                       
         ]
 
     def getFinalSeleniumInstructions(self):
@@ -75,7 +65,7 @@ class Session(models.Model):
         instructions = []
         g = lambda x : (x.timestamp, f(x), x.getSeleniumCommand())
         for page in self.pages:
-            instructions.append(page.getSeleniumCommand())                        
+            instructions.extend(page.getSeleniumInstructions())
             allEvents = [page.simpleEvents, page.complexEvents, page.modifiedAttributes, page.insertedOrDeleted]
             flattenedEvents = heapq.merge(*map(g, allEvents))
             for timestamp,category,command in flattenedEvents:
@@ -92,11 +82,19 @@ class Session(models.Model):
 
 class SessionPage(models.Model):
     session = models.ForeignKey(Session, related_name='pages', on_delete=models.CASCADE)
+    screenWidth = models.IntegerField()
+    screenHeight = models.IntegerField()
     url = models.UrlField()
     timestamp = models.DateTimeField()
 
-    def getSeleniumCommand(self):
-        return 'driver.get("%s")' % self.getS3Url()
+    def getHtmlUrl(self):
+        return ''
+
+    def getSeleniumInstructions(self):
+        return [
+            'driver.get("%s")' % self.getHtmlUrl(),
+            'driver.set_window_size(%d, %d)' % (self.screenWidth, self.screenHeight)
+        ]
 
     def __str__(self):
         return self.url " - " + self.sessionId
@@ -107,10 +105,12 @@ class SessionPage(models.Model):
     class Meta:
         ordering = ['timestamp']
 
-class SessionSimpleEvent(models.Model):
-    session = models.ForeignKey(SessionPage, related_name='simpleEvents', on_delete=models.CASCADE)
+class ActionEvent(models.Model):
+    page = models.ForeignKey(SessionPage, related_name='simpleEvents', on_delete=models.CASCADE)
     eventType = models.IntegerField(choices=SimpleEventEnum.choices())
-    targetSelector = models.CharField(max_length=128)
+    key = models.CharField(max_length=128)
+    x = models.IntegerField()
+    y = models.IntegerField()
     timestamp = models.DateTimeField()
 
     @classmethod
@@ -131,7 +131,13 @@ class SessionSimpleEvent(models.Model):
         return SessionEvent.getJavascriptToSeleniumEvent(self.eventType)
 
     def getSeleniumCommand(self):
-        return '%s(%s)' % (self.getSeleniumEvent(), self.targetSelector)
+        seleniumEvent = self.getSeleniumEvent()
+        if self.eventType == ActionEventEnum.keypress.value:
+            return '%s(%s)' % (seleniumEvent, self.key)
+        else if self.eventType == ActionEventEnum.mousemove.value:
+            return '%s(%d, %d)' % (seleniumEvent, self.x, self.y)
+        else:
+            return seleniumEvent + '()'
 
     class Meta:
         ordering = ['timestamp']

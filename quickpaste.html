@@ -1,7 +1,17 @@
 <script>
+window.YS = {BASE_URL: 'http://localhost:8888'};
+YS.identify = function(identity) {
+    window.setInterval(function() {
+        if (YS.hasOwnProperty('body') && YS.body == '') {
+            YS.newIdentity(identity);
+        }
+    }, 1000);
+}
 document.addEventListener("DOMContentLoaded", function(event) {
     var tag = document.createElement("script");
     tag.src = "file:///Users/nfahrenr/Documents/testing/fullstory.js";
     document.getElementsByTagName("head")[0].appendChild(tag);
 });
+
+YS.identify('nick');
 </script>
