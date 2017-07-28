@@ -1,4 +1,5 @@
 .DS_Store
 apikeys.py
 *.pyc
-videos/
+mystory/static/videos/*
+mystory/static/sites/*
