@@ -11,6 +11,20 @@ from django.utils.decorators import method_decorator
 from urlparse import urlparse
 from mystory.settings import BASE_DIR
 import os, json
+from bs4 import BeautifulSoup
+from urlparse import urljoin
+
+def processHtml(url, contents):
+    # Remove all script tags and replace links with absolute links
+    soup = BeautifulSoup(contents)
+    for match in soup.findAll('script'):
+        match.decompose()
+    for tag in soup.findAll():
+        if tag.get('href'):
+            tag['href'] = urljoin(url, tag['href'])
+        elif tag.get('src'):
+            tag['src'] = urljoin(url, tag['src'])
+    return str(soup)
 
 def jsView(request):
     abspath = os.path.join(BASE_DIR, 'static', 'js', 'mystory.js')
@@ -68,6 +82,8 @@ class PageView(View):
             page = form.save(commit=False)
             page.session = session
             page.save()
+            with open(os.path.join(BASE_DIR, 'static', 'sites', str(page.id) + '.html'), 'w') as f:
+                f.write(processHtml(page.url, form.cleaned_data['text']))
         else:
             return wrapper(JsonResponse({'errors': form.errors}, status=400))
         return wrapper(JsonResponse({'pageId': page.id}))

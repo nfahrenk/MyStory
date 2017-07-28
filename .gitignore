@@ -3,3 +3,5 @@ apikeys.py
 *.pyc
 mystory/static/videos/*
 mystory/static/sites/*
+celerybeat.pid
+

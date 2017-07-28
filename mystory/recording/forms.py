@@ -9,6 +9,7 @@ class SessionForm(ModelForm):
         fields = ['baseUrl', 'timestamp']
 
 class PageForm(ModelForm):
+    text = CharField()
     timestamp = DateTimeField(input_formats=['%a, %d %b %Y %H:%M:%S %Z %f'])    
     
     class Meta:

@@ -5,7 +5,7 @@ import os
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'mystory.settings')
 django.setup()
 from celery import Celery
-from recording.tasks import checkForSessionEnd
+from .tasks import pollSession
 
 app = Celery('mystory')
 
@@ -21,4 +21,4 @@ app.autodiscover_tasks()
 @app.on_after_configure.connect
 def setup_periodic_tasks(sender, **kwargs):
     # Calls test('world') every 30 seconds
-    sender.add_periodic_task(30.0, checkForSessionEnd.s(), name='Check for the end of a session')
+    sender.add_periodic_task(30.0, pollSession.s(), name='Check for the end of a session')

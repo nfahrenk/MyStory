@@ -57,6 +57,11 @@ class Session(models.Model):
             'from selenium.webdriver.common.keys import Keys',
             'from selenium.webdriver.common.desired_capabilities import DesiredCapabilities',
             'from selenium.webdriver.common.action_chains import ActionChains',
+            'import time',
+            'class Actions(ActionChains):',
+            '\tdef wait(self, time_s, float):',
+            '\t\tself._actions.append(lambda: time.sleep(time_s))',
+            '\t\treturn self',
             'driver = webdriver.Remote(command_executor="http://127.0.0.1:4444/wd/hub", desired_capabilities=DesiredCapabilities.CHROME)',                       
         ]
 
@@ -88,7 +93,7 @@ class Session(models.Model):
                         instructions[-1] += '.wait(' + str(delta.total_seconds()) + ')'
                     instructions[-1] += '.' + command
                 elif category == CategoryEnum.actionEvent.value:
-                    instructions.append('ActionChains(driver).' + command)
+                    instructions.append('Actions(driver).' + command)
                 elif isActionChain:
                     instructions[-1] += '.perform()'
                     instructions.append(command)
@@ -99,6 +104,8 @@ class Session(models.Model):
                 if event.eventType == ActionEventEnum.mousemove.value:
                     prevX = event.x
                     prevY = event.y
+            if isActionChain:
+                instructions[-1] += '.perform()'
             prevPage = page
         return instructions
 
@@ -123,7 +130,7 @@ class Page(models.Model):
     timestamp = models.DateTimeField()
 
     def getHtmlUrl(self):
-        return 'www.yelp.com'
+        return 'file:///sites/%d.html' % self.id
 
     def getSeleniumInstructions(self, prevPage=None):
         instructions = []
