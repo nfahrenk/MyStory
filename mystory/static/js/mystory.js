@@ -103,7 +103,7 @@ YS.record = function() {
             ALL_EVENTS = ['click', 'dblclick', 'contextmenu', 'mousedown', 'mouseup', 'keydown', 'keypress', 'keyup'],
             PHASES = [ '', 'CAPTURING_PHASE', 'AT_TARGET', 'BUBBLING_PHASE' ],
             logEvent = function ( evt ) {
-                if (evt.type == 'keypress') {
+                if (evt.type == 'keypress' || evt.type == 'keyup' || evt.type == 'keydown') {
                     YS.actionEvents.push({'eventType': actionEnum[evt.type], 'key': evt.key, 'timestamp': YS.timestamp()});
                 } else {
                     YS.actionEvents.push({'eventType': actionEnum[evt.type], 'timestamp': YS.timestamp()});
@@ -186,7 +186,7 @@ YS.record = function() {
         if (YS.body == '') {
             YS.newEvents();
         }
-    }, 5000);
+    }, 2000);
 };
 
 YS.newIdentity = function(identity) {

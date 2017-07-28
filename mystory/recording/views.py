@@ -13,6 +13,7 @@ from mystory.settings import BASE_DIR
 import os, json
 from bs4 import BeautifulSoup
 from urlparse import urljoin
+from django.shortcuts import render
 
 def processHtml(url, contents):
     # Remove all script tags and replace links with absolute links
@@ -21,9 +22,9 @@ def processHtml(url, contents):
         match.decompose()
     for tag in soup.findAll():
         if tag.get('href'):
-            tag['href'] = urljoin(url, tag['href'])
+            tag['href'] = urljoin('http://publy.nickfahrenkrog.me/', tag['href'])
         elif tag.get('src'):
-            tag['src'] = urljoin(url, tag['src'])
+            tag['src'] = urljoin('http://publy.nickfahrenkrog.me/', tag['src'])
     return str(soup)
 
 def jsView(request):
@@ -49,6 +50,9 @@ def getSession(sessionId, url):
 def wrapper(response):
     response['Access-Control-Allow-Origin'] = 'http://localhost:8000'
     return response
+
+def index(request):
+    return render(request, 'index.html', {'session': Session.objects.filter(isActive=False, isProcessed=True).order_by('-timestamp').first()})
 
 @method_decorator(csrf_exempt, name='dispatch')
 class SessionView(View):    

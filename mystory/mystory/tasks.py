@@ -35,13 +35,15 @@ def process(instructions, sessionId):
         os.remove(path)
     except:
         pass
-    subprocess.call(['docker', 'exec', 'grid', '/bin-utils/stop-video'])
+    subprocess.call(['docker', 'exec', 'grid', 'stop-video'])
     subprocess.call(['docker', 'cp', 'grid:/videos/.', os.path.join(BASE_DIR, 'static', 'videos')])
     subprocess.call(['docker', 'exec', 'grid', 'stop'])
     subprocess.call(['docker', 'stop', 'grid'])
     subprocess.call(['docker', 'rm', '-v', 'grid'])
     session = Session.objects.get(id=sessionId)
     session.isProcessed = True
-    if len(glob.iglob('*.[Mm][Pp]4')) > 0:
+    try:
         session.filename = max(glob.iglob('*.[Mm][Pp]4'), key=os.path.getctime)
+    except:
+        pass
     session.save()

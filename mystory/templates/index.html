@@ -1,0 +1,24 @@
+{% load staticfiles %}
+<html>
+  <head>
+    <link href="http://vjs.zencdn.net/6.2.4/video-js.css" rel="stylesheet">
+
+    <!-- If you'd like to support IE8 -->
+    <script src="http://vjs.zencdn.net/ie8/1.1.2/videojs-ie8.min.js"></script>
+  </head>
+
+  <body>
+    <p>Session ID: {{session.id}}</p>
+    <p>User Identity: {{session.identifier}}</p>
+    <video id="my-video" class="video-js" controls preload="auto" width="760" height="752"
+    data-setup="{}">
+      <source src="{% static 'videos/vid_chrome_25550_firefox_25551.mp4' %}" type='video/mp4'>
+      <p class="vjs-no-js">
+        To view this video please enable JavaScript, and consider upgrading to a web browser that
+        <a href="http://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>
+      </p>
+    </video>
+
+    <script src="http://vjs.zencdn.net/6.2.4/video.js"></script>
+  </body>
+</html>

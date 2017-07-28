@@ -7,6 +7,7 @@ import heapq
 from itertools import chain
 from uuid import uuid4
 import inspect
+from selenium.webdriver.common.keys import Keys
 
 class ChoiceEnum(Enum):
     @classmethod
@@ -59,7 +60,7 @@ class Session(models.Model):
             'from selenium.webdriver.common.action_chains import ActionChains',
             'import time',
             'class Actions(ActionChains):',
-            '\tdef wait(self, time_s, float):',
+            '\tdef wait(self, time_s):',
             '\t\tself._actions.append(lambda: time.sleep(time_s))',
             '\t\treturn self',
             'driver = webdriver.Remote(command_executor="http://127.0.0.1:4444/wd/hub", desired_capabilities=DesiredCapabilities.CHROME)',                       
@@ -134,9 +135,9 @@ class Page(models.Model):
 
     def getSeleniumInstructions(self, prevPage=None):
         instructions = []
-        if prevPage and prevPage.getHtmlUrl() != self.getHtmlUrl():
+        if not prevPage or prevPage.getHtmlUrl() != self.getHtmlUrl():
             instructions.append('driver.get("%s")' % self.getHtmlUrl())
-        if prevPage and (self.screenWidth != prevPage.screenWidth or self.screenHeight != prevPage.screenHeight):
+        if not prevPage or (self.screenWidth != prevPage.screenWidth or self.screenHeight != prevPage.screenHeight):
             instructions.append('driver.set_window_size(%d, %d)' % (self.screenWidth, self.screenHeight))
         return instructions
 
@@ -177,8 +178,13 @@ class ActionEvent(models.Model):
 
     def getSeleniumCommand(self, prevX=0, prevY=0):
         seleniumEvent = self.getSeleniumEvent()
-        if self.eventType == ActionEventEnum.keypress.value:
-            return '%s(%s)' % (seleniumEvent, self.key)
+        if self.eventType in [ActionEventEnum.keypress.value, ActionEventEnum.keyup.value, ActionEventEnum.keydown.value]:
+            g = lambda x: x.lower().replace('_', '')
+            key = '"' + self.key + '"'
+            for const in dir(Keys):
+                if g(self.key) == g(const):
+                    key = 'Keys.' + const
+            return '%s(%s)' % (seleniumEvent, key)
         elif self.eventType == ActionEventEnum.mousemove.value:
             if self.x == prevX and self.y == prevY:
                 return ''
