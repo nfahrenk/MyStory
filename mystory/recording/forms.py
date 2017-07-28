@@ -2,21 +2,21 @@ from django.forms import ModelForm, IntegerField, CharField, DateTimeField
 from recording.models import Session, Page, ActionEvent
 
 class SessionForm(ModelForm):
-    timestamp = DateTimeField(input_formats=['%a, %d %b %Y %H:%M:%S %Z'])
+    timestamp = DateTimeField(input_formats=['%a, %d %b %Y %H:%M:%S %Z %f'])
     
     class Meta:
         model = Session
         fields = ['baseUrl', 'timestamp']
 
 class PageForm(ModelForm):
-    timestamp = DateTimeField(input_formats=['%a, %d %b %Y %H:%M:%S %Z'])    
+    timestamp = DateTimeField(input_formats=['%a, %d %b %Y %H:%M:%S %Z %f'])    
     
     class Meta:
         model = Page
         fields = ['screenWidth', 'screenHeight', 'url', 'timestamp']
 
 class ActionEventForm(ModelForm):
-    timestamp = DateTimeField(input_formats=['%a, %d %b %Y %H:%M:%S %Z'])
+    timestamp = DateTimeField(input_formats=['%a, %d %b %Y %H:%M:%S %Z %f'])
     eventType = IntegerField()
     key = CharField(max_length=128, required=False)
     x = IntegerField(required=False)

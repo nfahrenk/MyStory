@@ -27,7 +27,10 @@ var actionEnum = {
 YS.actionEvents = [];
 YS.modifiedAttributes = [];
 YS.insertedOrDeleted = [];
-YS.timestamp = function() {return (new Date()).toUTCString();};
+YS.timestamp = function() {
+    dateObj = new Date();
+    return dateObj.toUTCString() + ' ' + dateObj.getUTCMilliseconds();
+};
 YS.baseUrl = window.location.protocol + "//" + window.location.hostname + (window.location.port == "" ? "" : ":" + window.location.port);
 YS.url = window.location.href;
 
@@ -197,7 +200,7 @@ YS.newIdentity = function(identity) {
 };
 
 YS.main = function() {
-    if (localStorage.getItem('sessionId') == null) {
+    if (!localStorage.getItem('sessionId')) {
         YS.newSession();
     }
     console.log(localStorage.getItem('sessionId'));

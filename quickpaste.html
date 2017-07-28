@@ -4,12 +4,13 @@ YS.identify = function(identity) {
     window.setInterval(function() {
         if (YS.hasOwnProperty('body') && YS.body == '') {
             YS.newIdentity(identity);
+            clearInterval(myVar);
         }
     }, 1000);
 }
 document.addEventListener("DOMContentLoaded", function(event) {
     var tag = document.createElement("script");
-    tag.src = "file:///Users/nfahrenr/Documents/testing/fullstory.js";
+    tag.src = YS.BASE_URL + '/mystory.js';
     document.getElementsByTagName("head")[0].appendChild(tag);
 });
 

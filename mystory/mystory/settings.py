@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/1.11/ref/settings/
 """
 
 import os
-from apikeys import LOCAL_DB_USER
+from apikeys import LOCAL_DB_USER, SECRET_KEY
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -20,7 +20,6 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # See https://docs.djangoproject.com/en/1.11/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'm5#p%f0=kjt5bwk*+z=+8bqwl)ets%72n&!n$g5i%-lmw@6@jc'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
