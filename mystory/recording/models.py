@@ -47,6 +47,7 @@ class Session(models.Model):
     baseUrl = models.URLField()
     isActive = models.BooleanField(default=True)
     isProcessed = models.BooleanField(default=False)
+    filename = models.CharField(max_length=256, blank=True)
     timestamp = models.DateTimeField()
 
     @classmethod
