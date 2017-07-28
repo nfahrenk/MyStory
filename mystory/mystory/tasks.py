@@ -40,6 +40,7 @@ def process(instructions, sessionId):
     subprocess.call(['docker', 'exec', 'grid', 'stop'])
     subprocess.call(['docker', 'stop', 'grid'])
     subprocess.call(['docker', 'rm', '-v', 'grid'])
+    os.rename(os.path.join(BASE_DIR, 'static', 'videos', 'vid_chrome_25550_firefox_25551.mp4'), os.path.join(BASE_DIR, 'static', 'videos', sessionId + '.mp4'))
     session = Session.objects.get(id=sessionId)
     session.isProcessed = True
     try:

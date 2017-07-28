@@ -52,7 +52,12 @@ def wrapper(response):
     return response
 
 def index(request):
-    return render(request, 'index.html', {'session': Session.objects.filter(isActive=False, isProcessed=True).order_by('-timestamp').first()})
+    session = Session.objects.filter(isActive=False, isProcessed=True).order_by('-timestamp').first()
+    print 'videos/' + session.id
+    return render(request, 'index.html', {
+        'session': session,
+        'path': 'videos/' + session.id + '.mp4'
+    })
 
 @method_decorator(csrf_exempt, name='dispatch')
 class SessionView(View):    
