@@ -1,17 +1,26 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from django.shortcuts import render, get_object_or_404
-from django.http import JsonResponse
+# from django.shortcuts import render
+from django.http import JsonResponse, HttpResponse
 from django.views import View
-from recording.models import SessionPage, SessionEvents
-from recording.forms import SessionPageForm
+from recording.models import Session, Page
+from recording.forms import SessionForm, PageForm, ActionEventForm
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from urlparse import urlparse
+from mystory.settings import BASE_DIR
+import os, json
+
+def jsView(request):
+    abspath = os.path.join(BASE_DIR, 'static', 'js', 'mystory.js')
+    with open(abspath, 'r') as f:
+        response = HttpResponse(f.read())
+    response['Content-Type'] = 'application/x-javascript'
+    return response
 
 def getBaseUrl(url):
-    o = urlparse('http://www.cwi.nl:80/%7Eguido/Python.html')
+    o = urlparse(url)
     return o.scheme + '://' + o.netloc
 
 def getSession(sessionId, url):
@@ -23,51 +32,71 @@ def getSession(sessionId, url):
         pass
     return False
 
-@method_decorator(csrf_exempt)
-class SessionView(View):
+def wrapper(response):
+    response['Access-Control-Allow-Origin'] = 'http://localhost:8000'
+    return response
 
+@method_decorator(csrf_exempt, name='dispatch')
+class SessionView(View):    
     def post(self, request):
         form = SessionForm(request.POST)
         if not form.is_valid():
-            return JsonResponse({'errors': form.errors}, status=400)
+            return wrapper(JsonResponse({'errors': form.errors}, status=400))
         session = form.save()
-        return JsonResponse({'sessionId': session.id})
+        return wrapper(JsonResponse({'sessionId': session.id}))
 
-@method_decorator(csrf_exempt)
+@method_decorator(csrf_exempt, name='dispatch')
 class IdentifyView(View):
-    
     def post(self, request, sessionId):
         session = getSession(sessionId, request.POST.get('url'))
-        if not isValidSession(sessionId, None):
-            return JsonResponse({'errors': [{'sessionId': 'Not a valid session id'}]}, status=400)
-        session = get_object_or_404(Session, id=sessionId)
+        if not session:
+            return wrapper(JsonResponse({'errors': [{'sessionId': 'Not a valid session id'}]}, status=404))
         if not request.POST.get('identifier'):
-            return JsonResponse({'errors': [{'identifier': 'Must be at least one character long'}]}, status=400)
+            return wrapper(JsonResponse({'errors': [{'identifier': 'Must be at least one character long'}]}, status=400))
         session.identifier = request.POST.get('identifier')
         session.save()
-        return JsonResponse({'response': 'ok'})
+        return wrapper(JsonResponse({'response': 'ok'}))
 
-@method_decorator(csrf_exempt)
+@method_decorator(csrf_exempt, name='dispatch')
 class PageView(View):
-
     def post(self, request, sessionId):
         session = getSession(sessionId, request.POST.get('url'))
-        if not isValidSession(sessionId, None):
-            return JsonResponse({'errors': [{'sessionId': 'Not a valid session id'}]}, status=400)
-        form = SessionPageForm(request.POST)
+        if not session:
+            return wrapper(JsonResponse({'errors': [{'sessionId': 'Not a valid session id'}]}, status=404))
+        form = PageForm(request.POST)
         if form.is_valid():
             page = form.save(commit=False)
-            page.session = 
+            page.session = session
+            page.save()
         else:
-            return JsonResponse({'errors': form.errors})
-        return JsonResponse({'pageId': page.id})
+            return wrapper(JsonResponse({'errors': form.errors}, status=400))
+        return wrapper(JsonResponse({'pageId': page.id}))
 
-@method_decorator(csrf_exempt)
+@method_decorator(csrf_exempt, name='dispatch')
 class EventsView(View):
-
     def post(self, request, sessionId):
-        session = getSession(sessionId, request.POST.get('url'))
-        events = request.POST.get('events', [])
-        for event in events:
-            form = SessionEventForm()
+        url = request.POST.get('url')
+        session = getSession(sessionId, url)
+        if not session:
+            return wrapper(JsonResponse({'errors': [{'sessionId': 'Not a valid session id'}]}, status=404))
+        actionEvents = json.loads(request.POST.get('actionEvents', []))
+        page = Page.objects.filter(session__id=sessionId, url=url).order_by('-timestamp')
+        if not page.exists():
+            return wrapper(JsonResponse({'errors': [{'page': 'Page not previously initialized'}]}, status=404))
+        page = page.first()
+        errors = []
+        for event in actionEvents:
+            form = ActionEventForm(event)
+            if form.is_valid():
+                action = form.save(commit=False)
+                action.page = page
+                action.eventType = form.cleaned_data['eventType']
+                action.save()
+            else:
+                eventStr = str(event.get('eventType')) + ' - ' + event.get('timestamp')
+                errors.append({eventStr: form.errors})
+        if errors:
+            print errors
+            return wrapper(JsonResponse({'errors': errors}, status=400))
+        return wrapper(JsonResponse({'response': 'ok'}))
 

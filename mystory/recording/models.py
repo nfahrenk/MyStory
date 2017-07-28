@@ -5,6 +5,8 @@ from django.db import models
 from enum import Enum
 import heapq
 from itertools import chain
+from uuid import uuid4
+import inspect
 
 class ChoiceEnum(Enum):
     @classmethod
@@ -18,18 +20,17 @@ class ChoiceEnum(Enum):
         return choices
 
 class CategoryEnum(Enum):
-    simpleEvent = 0
-    complexEvent = 1
-    modifiedAttribute = 2
-    insertedOrDeleted = 3
+    actionEvent = 0
+    modifiedAttribute = 1
+    insertedOrDeleted = 2
 
-def lookupCategory(x):
-    if isinstance(x, SessionSimpleEvent):
-        return CategoryEnum.simpleEvent.value
-    elif isinstance(x, SesionComplexEvent):
-        return CategoryEnum.complexEvent.value
+def lookupCategory(instance):
+    if isinstance(instance, ActionEvent):
+        return 0
+    else:
+        return -1
 
-class SimpleEventEnum(ChoiceEnum):
+class ActionEventEnum(ChoiceEnum):
     click = 0
     dblclick = 1
     contextmenu = 2
@@ -38,11 +39,12 @@ class SimpleEventEnum(ChoiceEnum):
     keydown = 5
     keyup = 6
     keypress = 7
+    mousemove = 8
 
 class Session(models.Model):
-    id = models.CharField(primary_key=True, max_length=36, default=lambda : str(uuid4()))    
+    id = models.CharField(primary_key=True, max_length=36, default=str(uuid4()))
     identifier = models.CharField(max_length=64, blank=True)    
-    baseUrl = models.UrlField()
+    baseUrl = models.URLField()
     isActive = models.BooleanField(default=True)
     isProcessed = models.BooleanField(default=False)
     timestamp = models.DateTimeField()
@@ -53,51 +55,85 @@ class Session(models.Model):
             'from selenium import webdriver',
             'from selenium.webdriver.common.keys import Keys',
             'from selenium.webdriver.common.desired_capabilities import DesiredCapabilities',
+            'from selenium.webdriver.common.action_chains import ActionChains',
             'driver = webdriver.Remote(command_executor="http://127.0.0.1:4444/wd/hub", desired_capabilities=DesiredCapabilities.CHROME)',                       
         ]
 
-    def getFinalSeleniumInstructions(self):
+    @classmethod
+    def getFinalSeleniumInstructions(cls):
         return [
             'driver.quit()'
         ]
 
     def generateSeleniumInstructions(self):
         instructions = []
-        g = lambda x : (x.timestamp, f(x), x.getSeleniumCommand())
-        for page in self.pages:
-            instructions.extend(page.getSeleniumInstructions())
-            allEvents = [page.simpleEvents, page.complexEvents, page.modifiedAttributes, page.insertedOrDeleted]
-            flattenedEvents = heapq.merge(*map(g, allEvents))
-            for timestamp,category,command in flattenedEvents:
-                # Create action chain if complex or simple events
-                pass
+        prevPage = None
+        for page in self.pages.all():
+            instructions.extend(page.getSeleniumInstructions(prevPage))
+            allEvents = [event for event in page.actionEvents.all()]
+            isActionChain = False
+            previousTimestamp = page.timestamp
+            prevX = 0
+            prevY = 0
+            for event in allEvents:
+                timestamp = event.timestamp
+                category = lookupCategory(event)
+                command = event.getSeleniumCommand(prevX, prevY)
+                if not command:
+                    continue
+                if isActionChain and category == CategoryEnum.actionEvent.value:
+                    delta = timestamp - previousTimestamp
+                    if delta.total_seconds() > 0:
+                        instructions[-1] += '.wait(' + str(delta.total_seconds()) + ')'
+                    instructions[-1] += '.' + command
+                elif category == CategoryEnum.actionEvent.value:
+                    instructions.append('ActionChains(driver).' + command)
+                elif isActionChain:
+                    instructions[-1] += '.perform()'
+                    instructions.append(command)
+                else:
+                    instructions.append(command)
+                isActionChain = category == CategoryEnum.actionEvent.value
+                previousTimestamp = timestamp
+                if event.eventType == ActionEventEnum.mousemove.value:
+                    prevX = event.x
+                    prevY = event.y
+            prevPage = page
         return instructions
 
     def generatePythonFileContents(self):
         instructions = chain(
             Session.getInitialSeleniumInstructions(), 
             self.generateSeleniumInstructions(),
-            Session.generateSeleniumInstructions())
+            Session.getFinalSeleniumInstructions())
         return '\n'.join(instructions)
 
-class SessionPage(models.Model):
+    def __str__(self):
+        return self.generatePythonFileContents()
+
+    def __unicode__(self):
+        return str(self)
+
+class Page(models.Model):
     session = models.ForeignKey(Session, related_name='pages', on_delete=models.CASCADE)
     screenWidth = models.IntegerField()
     screenHeight = models.IntegerField()
-    url = models.UrlField()
+    url = models.URLField()
     timestamp = models.DateTimeField()
 
     def getHtmlUrl(self):
-        return ''
+        return 'www.yelp.com'
 
-    def getSeleniumInstructions(self):
-        return [
-            'driver.get("%s")' % self.getHtmlUrl(),
-            'driver.set_window_size(%d, %d)' % (self.screenWidth, self.screenHeight)
-        ]
+    def getSeleniumInstructions(self, prevPage=None):
+        instructions = []
+        if prevPage and prevPage.getHtmlUrl() != self.getHtmlUrl():
+            instructions.append('driver.get("%s")' % self.getHtmlUrl())
+        if prevPage and (self.screenWidth != prevPage.screenWidth or self.screenHeight != prevPage.screenHeight):
+            instructions.append('driver.set_window_size(%d, %d)' % (self.screenWidth, self.screenHeight))
+        return instructions
 
     def __str__(self):
-        return self.url " - " + self.sessionId
+        return self.url + " - " + self.session.id
 
     def __unicode__(self):
         return str(self)
@@ -106,38 +142,47 @@ class SessionPage(models.Model):
         ordering = ['timestamp']
 
 class ActionEvent(models.Model):
-    page = models.ForeignKey(SessionPage, related_name='simpleEvents', on_delete=models.CASCADE)
-    eventType = models.IntegerField(choices=SimpleEventEnum.choices())
-    key = models.CharField(max_length=128)
-    x = models.IntegerField()
-    y = models.IntegerField()
+    page = models.ForeignKey(Page, related_name='actionEvents', on_delete=models.CASCADE)
+    eventType = models.IntegerField(choices=ActionEventEnum.choices())
+    key = models.CharField(max_length=128, blank=True, default='')
+    x = models.IntegerField(default=0)
+    y = models.IntegerField(default=0)
     timestamp = models.DateTimeField()
 
     @classmethod
     def getJavascriptToSeleniumEvent(cls, eventValue):
         javascriptEventToSelenium = {
-            SimpleEventEnum.click.value: 'click',
-            SimpleEventEnum.dblclick.value: 'double_click',
-            SimpleEventEnum.contextmenu.value: 'context_click',
-            SimpleEventEnum.mousedown.value: 'click_and_hold',
-            SimpleEventEnum.mouseup.value: 'release',
-            SimpleEventEnum.keydown.value: 'key_down',
-            SimpleEventEnum.keyup.value: 'key_up',
-            SimpleEventEnum.keypress.value: 'send_keys'
+            ActionEventEnum.click.value: 'click',
+            ActionEventEnum.dblclick.value: 'double_click',
+            ActionEventEnum.contextmenu.value: 'context_click',
+            ActionEventEnum.mousedown.value: 'click_and_hold',
+            ActionEventEnum.mouseup.value: 'release',
+            ActionEventEnum.keydown.value: 'key_down',
+            ActionEventEnum.keyup.value: 'key_up',
+            ActionEventEnum.keypress.value: 'send_keys',
+            ActionEventEnum.mousemove.value: 'move_by_offset'
         }
         return javascriptEventToSelenium[eventValue]
 
     def getSeleniumEvent(self):
-        return SessionEvent.getJavascriptToSeleniumEvent(self.eventType)
+        return ActionEvent.getJavascriptToSeleniumEvent(self.eventType)
 
-    def getSeleniumCommand(self):
+    def getSeleniumCommand(self, prevX=0, prevY=0):
         seleniumEvent = self.getSeleniumEvent()
         if self.eventType == ActionEventEnum.keypress.value:
             return '%s(%s)' % (seleniumEvent, self.key)
-        else if self.eventType == ActionEventEnum.mousemove.value:
-            return '%s(%d, %d)' % (seleniumEvent, self.x, self.y)
+        elif self.eventType == ActionEventEnum.mousemove.value:
+            if self.x == prevX and self.y == prevY:
+                return ''
+            return '%s(%d, %d)' % (seleniumEvent, self.x - prevX, self.y - prevY)
         else:
             return seleniumEvent + '()'
+
+    def __str__(self):
+        return self.getSeleniumCommand()
+
+    def __unicode__(self):
+        return str(self)
 
     class Meta:
         ordering = ['timestamp']

@@ -33,7 +33,7 @@ YS.url = window.location.href;
 
 YS.newSession = function() {
     var sessionForm = new FormData();
-    sessionForm.append('baseUrl', YS.baseUrl;
+    sessionForm.append('baseUrl', YS.baseUrl);
     sessionForm.append('timestamp', YS.timestamp());
     fetch(YS.BASE_URL + "/start", {
         method: "POST",
@@ -47,7 +47,7 @@ YS.newSession = function() {
     }).then(function (json) {
         localStorage.setItem('sessionId', json.sessionId);
     });
-}
+};
 
 YS.newPage = function() {
     var w = window,
@@ -75,35 +75,35 @@ YS.newPage = function() {
         }
         firstTime = false;
     });
-}
+};
 
 YS.newEvents = function() {
     var eventForm = new FormData();
-    eventForm.append('url', YS.url);
-    eventForm.append('actionEvents', YS.actionEvents);
+    eventForm.append('url', YS.url);    
+    eventForm.append('actionEvents', JSON.stringify(YS.actionEvents));
     YS.actionEvents = [];
-    eventForm.append('modifiedAttributes', YS.modifiedAttributes);
+    eventForm.append('modifiedAttributes', JSON.stringify(YS.modifiedAttributes));
     YS.modifiedAttributes = [];
-    eventForm.append('insertedOrDeleted', YS.insertedOrDeleted);
+    eventForm.append('insertedOrDeleted', JSON.stringify(YS.insertedOrDeleted));
     YS.insertedOrDeleted = [];
     fetch(YS.BASE_URL + "/record/" + localStorage.getItem('sessionId'), {
         method: "POST",
         body: eventForm
     });
-}
+};
 
 YS.record = function() {
     (function (global) {
-        if ( !global.Event && !('keys' in Object) && !('bind' in Function) ) { return }
+        if ( !global.Event && !('keys' in Object) && !('bind' in Function) ) { return; }
 
         var eventProto = Event.prototype,
             ALL_EVENTS = ['click', 'dblclick', 'contextmenu', 'mousedown', 'mouseup', 'keydown', 'keypress', 'keyup'],
             PHASES = [ '', 'CAPTURING_PHASE', 'AT_TARGET', 'BUBBLING_PHASE' ],
             logEvent = function ( evt ) {
                 if (evt.type == 'keypress') {
-                    YS.actionEvents.append({'eventType': evt.type, 'key': evt.key, 'timestamp': YS.timestamp()});
+                    YS.actionEvents.push({'eventType': actionEnum[evt.type], 'key': evt.key, 'timestamp': YS.timestamp()});
                 } else {
-                    YS.actionEvents.append({'eventType': evt.type, 'timestamp': YS.timestamp()});
+                    YS.actionEvents.push({'eventType': actionEnum[evt.type], 'timestamp': YS.timestamp()});
                 }                
             },
             bindEvents = function (eventName) {
@@ -134,6 +134,8 @@ YS.record = function() {
     }(YS));
     YS.EventMonitor.start();
 
+    prevX = 0;
+    prevY = 0;
     (function() {
         var mousePos;
 
@@ -168,8 +170,11 @@ YS.record = function() {
         }
         function getMousePosition() {
             var pos = mousePos;
-            if (pos) {
-                YS.actionEvents.append({eventType: actionEnum.mousemove, x: pos.x, y: pos.y, timestamp: YS.timestamp()});
+            if (pos && (prevX != pos.x || prevY != pos.y)) {
+                YS.actionEvents.push({'eventType': actionEnum.mousemove, x: pos.x, y: pos.y, timestamp: YS.timestamp()});
+            } else if (pos) {
+                prevX = pos.x;
+                prevY = pos.y;
             }
         }
     })();
@@ -179,25 +184,28 @@ YS.record = function() {
             YS.newEvents();
         }
     }, 5000);
-}
+};
 
 YS.newIdentity = function(identity) {
     var identityForm = new FormData();
-    identityForm.append('url', FS.url);
+    identityForm.append('url', YS.url);
     identityForm.append('identifier', identity);
     fetch(YS.BASE_URL + "/initialize/" + localStorage.getItem('sessionId'), {
         method: "POST",
         body: identityForm
     });
-}
+};
 
 YS.main = function() {
     if (localStorage.getItem('sessionId') == null) {
         YS.newSession();
     }
+    console.log(localStorage.getItem('sessionId'));
     YS.newPage();
     YS.record();
-}
+};
+
+YS.main();
 
 // Track event
 
@@ -208,7 +216,7 @@ var inserted_or_deleted = [],
 
 var inserted_or_deleted_callback = function(allmutations) {
     allmutations.map( function(mr) {
-        inserted_or_deleted.append({timestamp: Date.now(), type: mr.type, target: mr.targer});
+        inserted_or_deleted.push({timestamp: Date.now(), type: mr.type, target: mr.targer});
     });
 },
 inserted_or_deleted_observer = new MutationObserver(inserted_or_deleted_callback),
@@ -218,7 +226,7 @@ inserted_or_deleted_options = {
 };
 var modified_attributes_callback = function(allmutations){
     allmutations.map( function(mr){
-        modified_attributes.append({timestamp: Date.now(), type: mr.oldValue});
+        modified_attributes.push({timestamp: Date.now(), type: mr.oldValue});
     });
 },
 modified_attributes_observer = new MutationObserver(modified_attributes_callback),
