@@ -15,6 +15,16 @@ from bs4 import BeautifulSoup
 from urlparse import urljoin
 from django.shortcuts import render
 
+def cors(func):
+    """
+    This is a method decorator used for modifying the Access-Control-Allow-Origin
+    """
+    def funcWrapper(request, *args, **kwargs):
+        response = func(request, *args, **kwargs)
+        response['Access-Control-Allow-Origin'] = 'http://localhost:8000'
+        return response
+    return funcWrapper
+
 def processHtml(url, contents):
     # Remove all script tags and replace links with absolute links
     soup = BeautifulSoup(contents)
@@ -47,10 +57,6 @@ def getSession(sessionId, url):
         pass
     return False
 
-def wrapper(response):
-    response['Access-Control-Allow-Origin'] = 'http://localhost:8000'
-    return response
-
 def index(request):
     session = Session.objects.filter(isActive=False, isProcessed=True).order_by('-timestamp').first()
     print 'videos/' + session.id
@@ -60,32 +66,35 @@ def index(request):
     })
 
 @method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(cors, name='post')
 class SessionView(View):    
     def post(self, request):
         form = SessionForm(request.POST)
         if not form.is_valid():
-            return wrapper(JsonResponse({'errors': form.errors}, status=400))
+            return JsonResponse({'errors': form.errors}, status=400)
         session = form.save()
-        return wrapper(JsonResponse({'sessionId': session.id}))
+        return JsonResponse({'sessionId': session.id})
 
 @method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(cors, name='post')
 class IdentifyView(View):
     def post(self, request, sessionId):
         session = getSession(sessionId, request.POST.get('url'))
         if not session:
-            return wrapper(JsonResponse({'errors': [{'sessionId': 'Not a valid session id'}]}, status=404))
+            return JsonResponse({'errors': [{'sessionId': 'Not a valid session id'}]}, status=404)
         if not request.POST.get('identifier'):
-            return wrapper(JsonResponse({'errors': [{'identifier': 'Must be at least one character long'}]}, status=400))
+            return JsonResponse({'errors': [{'identifier': 'Must be at least one character long'}]}, status=400)
         session.identifier = request.POST.get('identifier')
         session.save()
-        return wrapper(JsonResponse({'response': 'ok'}))
+        return JsonResponse({'response': 'ok'})
 
 @method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(cors, name='post')
 class PageView(View):
     def post(self, request, sessionId):
         session = getSession(sessionId, request.POST.get('url'))
         if not session:
-            return wrapper(JsonResponse({'errors': [{'sessionId': 'Not a valid session id'}]}, status=404))
+            return JsonResponse({'errors': [{'sessionId': 'Not a valid session id'}]}, status=404)
         form = PageForm(request.POST)
         if form.is_valid():
             page = form.save(commit=False)
@@ -94,20 +103,21 @@ class PageView(View):
             with open(os.path.join(BASE_DIR, 'static', 'sites', str(page.id) + '.html'), 'w') as f:
                 f.write(processHtml(page.url, form.cleaned_data['text']))
         else:
-            return wrapper(JsonResponse({'errors': form.errors}, status=400))
-        return wrapper(JsonResponse({'pageId': page.id}))
+            return JsonResponse({'errors': form.errors}, status=400)
+        return JsonResponse({'pageId': page.id})
 
 @method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(cors, name='post')
 class EventsView(View):
     def post(self, request, sessionId):
         url = request.POST.get('url')
         session = getSession(sessionId, url)
         if not session:
-            return wrapper(JsonResponse({'errors': [{'sessionId': 'Not a valid session id'}]}, status=404))
+            return JsonResponse({'errors': [{'sessionId': 'Not a valid session id'}]}, status=404)
         actionEvents = json.loads(request.POST.get('actionEvents', []))
         page = Page.objects.filter(session__id=sessionId, url=url).order_by('-timestamp')
         if not page.exists():
-            return wrapper(JsonResponse({'errors': [{'page': 'Page not previously initialized'}]}, status=404))
+            return JsonResponse({'errors': [{'page': 'Page not previously initialized'}]}, status=404)
         page = page.first()
         errors = []
         for event in actionEvents:
@@ -122,6 +132,6 @@ class EventsView(View):
                 errors.append({eventStr: form.errors})
         if errors:
             print errors
-            return wrapper(JsonResponse({'errors': errors}, status=400))
-        return wrapper(JsonResponse({'response': 'ok'}))
+            return JsonResponse({'errors': errors}, status=400)
+        return JsonResponse({'response': 'ok'})
 
