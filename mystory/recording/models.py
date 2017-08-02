@@ -48,7 +48,6 @@ class Session(models.Model):
     baseUrl = models.URLField()
     isActive = models.BooleanField(default=True)
     isProcessed = models.BooleanField(default=False)
-    filename = models.CharField(max_length=256, blank=True)
     timestamp = models.DateTimeField()
 
     @classmethod
@@ -154,6 +153,7 @@ class ActionEvent(models.Model):
     page = models.ForeignKey(Page, related_name='actionEvents', on_delete=models.CASCADE)
     eventType = models.IntegerField(choices=ActionEventEnum.choices())
     key = models.CharField(max_length=128, blank=True, default='')
+    target = models.CharField(max_length=1024, blank=True, default='')
     x = models.IntegerField(default=0)
     y = models.IntegerField(default=0)
     timestamp = models.DateTimeField()
@@ -176,21 +176,31 @@ class ActionEvent(models.Model):
     def getSeleniumEvent(self):
         return ActionEvent.getJavascriptToSeleniumEvent(self.eventType)
 
+    def keyboardCommand(self, seleniumEvent):
+        key = '"' + self.key + '"'
+        #  The following for loop is a quick way to see if it's a constant that needs to be translated
+        for const in dir(Keys):            
+            if const.isupper() and self.key.lower().replace('_', '') == const.lower().replace('_', ''):
+                key = 'Keys.' + const
+        return '%s(%s)' % (seleniumEvent, key)
+
+    def coordinateCommand(self, seleniumEvent, prevX, prevY):
+        # Used for mouse movements, window resize, etc.
+        if self.x == prevX and self.y == prevY:
+            return ''
+        return '%s(%d, %d)' % (seleniumEvent, self.x - prevX, self.y - prevY)
+
+    def basicCommand(self, seleniumEvent):
+        return '%s("%s")' % (seleniumEvent, self.target)
+
     def getSeleniumCommand(self, prevX=0, prevY=0):
         seleniumEvent = self.getSeleniumEvent()
         if self.eventType in [ActionEventEnum.keypress.value, ActionEventEnum.keyup.value, ActionEventEnum.keydown.value]:
-            g = lambda x: x.lower().replace('_', '')
-            key = '"' + self.key + '"'
-            for const in dir(Keys):
-                if g(self.key) == g(const):
-                    key = 'Keys.' + const
-            return '%s(%s)' % (seleniumEvent, key)
+            return self.keyboardCommand(seleniumEvent)
         elif self.eventType == ActionEventEnum.mousemove.value:
-            if self.x == prevX and self.y == prevY:
-                return ''
-            return '%s(%d, %d)' % (seleniumEvent, self.x - prevX, self.y - prevY)
+            return self.coordinateCommand(seleniumEvent, prevX, prevY)
         else:
-            return seleniumEvent + '()'
+            return self.basicCommand(seleniumEvent)
 
     def __str__(self):
         return self.getSeleniumCommand()
