@@ -210,3 +210,16 @@ class ActionEvent(models.Model):
 
     class Meta:
         ordering = ['timestamp']
+
+class ModifiedAttribute(models.Model):
+    page = models.ForeignKey(Page, related_name='modifiedAttributes', on_delete=models.CASCADE)
+    target = models.CharField(max_length=1024)
+    attributeName = models.CharField(max_length=128)
+    oldValue = models.CharField(max_length=1024)
+    newValue = models.CharField(max_length=1024)
+
+    def getSeleniumCommand(self):
+        return 'execute_script("document.querySelector(%s)")' % target
+
+    class Meta:
+        ordering = ['timestamp']

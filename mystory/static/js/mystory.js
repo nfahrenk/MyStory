@@ -416,7 +416,7 @@ YS.record = function() {
                 if ((evt.type == 'keypress' && !isHoldKey) || (isKeyboardEvent && isHoldKey)) {
                     YS.actionEvents.push({'eventType': actionEnum[evt.type], 'key': evt.key, 'timestamp': YS.timestamp()});
                 } else if (!isKeyboardEvent) {
-                    console.log(evt.target);
+                    // console.log(evt.target);
                     my_selector_generator = new CssSelectorGenerator();
                     var targetSelector = my_selector_generator.getSelector(evt.target);
                     YS.actionEvents.push({'eventType': actionEnum[evt.type], 'timestamp': YS.timestamp(), 'target': targetSelector});
@@ -450,8 +450,8 @@ YS.record = function() {
     }(YS));
     YS.EventMonitor.start();
 
-    prevX = 0;
-    prevY = 0;
+    var prevX = 0;
+    var prevY = 0;
     (function() {
         var mousePos;
 
@@ -493,7 +493,34 @@ YS.record = function() {
                 prevY = pos.y;
             }
         }
-    })();
+    })();    
+
+    var insertedOrDeletedCallback = function(allmutations) {
+        allmutations.map( function(mr) {
+            console.log(mr);
+            YS.insertedOrDeleted.push({timestamp: YS.timestamp(), type: mr.type, target: mr.target});
+        });
+    },
+    insertedOrDeletedObserver = new MutationObserver(insertedOrDeletedCallback),
+    insertedOrDeletedOptions = {
+        'childList': true,
+        'subtree': true
+    };
+    var modifiedAttributesCallback = function(allmutations){
+        allmutations.map( function(mr){
+            console.log(mr);
+            YS.modifiedAttributes.push({timestamp: YS.timestamp(), oldValue: mr.oldValue});
+        });
+    },
+    modifiedAttributesObserver = new MutationObserver(modifiedAttributesCallback),
+    modifiedAttributesOptions = {
+        'attributes': true,
+        'attributeOldValue': true,
+        'subtree': true
+    };
+
+    insertedOrDeletedObserver.observe(document.body, insertedOrDeletedOptions);
+    modifiedAttributesObserver.observe(document.body, modifiedAttributesOptions);
 
     window.setInterval(function() {
         if (YS.body == '') {
@@ -523,16 +550,16 @@ YS.main = function() {
 
 YS.main();
 
-// Track event
 
-// Track DOM changes
+
 /*
 var inserted_or_deleted = [],
     modified_attributes = [];
 
 var inserted_or_deleted_callback = function(allmutations) {
     allmutations.map( function(mr) {
-        inserted_or_deleted.push({timestamp: Date.now(), type: mr.type, target: mr.targer});
+        console.log(mr.addedNodes);
+        inserted_or_deleted.push({timestamp: Date.now(), type: mr.type, target: mr.target});
     });
 },
 inserted_or_deleted_observer = new MutationObserver(inserted_or_deleted_callback),
@@ -542,6 +569,7 @@ inserted_or_deleted_options = {
 };
 var modified_attributes_callback = function(allmutations){
     allmutations.map( function(mr){
+        console.log(mr);
         modified_attributes.push({timestamp: Date.now(), type: mr.oldValue});
     });
 },
@@ -555,3 +583,4 @@ modified_attributes_options = {
 inserted_or_deleted_observer.observe(document.body, inserted_or_deleted_options);
 modified_attributes_observer.observe(document.body, modified_attributes_options);
 */
+
