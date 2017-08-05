@@ -8,6 +8,7 @@ from itertools import chain
 from uuid import uuid4
 import inspect
 from selenium.webdriver.common.keys import Keys
+from parsePage import processHtml
 
 class ChoiceEnum(Enum):
     @classmethod
@@ -27,9 +28,12 @@ class CategoryEnum(Enum):
 
 def lookupCategory(instance):
     if isinstance(instance, ActionEvent):
-        return 0
-    else:
-        return -1
+        return CategoryEnum.actionEvent.value
+    elif isinstance(instance, ModifiedAttribute):
+        return CategoryEnum.modifiedAttribute.value
+    elif isinstance(instance, InsertedOrDeleted):
+        return CategoryEnum.insertedOrDeleted.value
+    return -1
 
 class ActionEventEnum(ChoiceEnum):
     click = 0
@@ -69,39 +73,43 @@ class Session(models.Model):
     def getFinalSeleniumInstructions(cls):
         return [
             'driver.quit()'
-        ]
+        ]   
 
     def generateSeleniumInstructions(self):
         instructions = []
         prevPage = None
         for page in self.pages.all():
             instructions.extend(page.getSeleniumInstructions(prevPage))
-            allEvents = [event for event in page.actionEvents.all()]
             isActionChain = False
             previousTimestamp = page.timestamp
             prevX = 0
             prevY = 0
-            for event in allEvents:
-                timestamp = event.timestamp
+            for timestamp, event in page.getAllEvents():
                 category = lookupCategory(event)
-                command = event.getSeleniumCommand(prevX, prevY)
+                isActionEvent = category == CategoryEnum.actionEvent.value
+                if isActionEvent:
+                    command = event.getSeleniumCommand(prevX, prevY)
+                else:
+                    command = event.getSeleniumCommand()
+                delta = timestamp - previousTimestamp
                 if not command:
                     continue
-                if isActionChain and category == CategoryEnum.actionEvent.value:
-                    delta = timestamp - previousTimestamp
+                if isActionChain and isActionEvent:
                     if delta.total_seconds() > 0:
                         instructions[-1] += '.wait(' + str(delta.total_seconds()) + ')'
                     instructions[-1] += '.' + command
-                elif category == CategoryEnum.actionEvent.value:
+                elif isActionEvent:
                     instructions.append('Actions(driver).' + command)
                 elif isActionChain:
                     instructions[-1] += '.perform()'
+                    instructions.append('time.sleep(' + str(delta.total_seconds()) + ')')
                     instructions.append(command)
                 else:
+                    instructions.append('time.sleep(' + str(delta.total_seconds()) + ')')
                     instructions.append(command)
                 isActionChain = category == CategoryEnum.actionEvent.value
                 previousTimestamp = timestamp
-                if event.eventType == ActionEventEnum.mousemove.value:
+                if isActionEvent and event.eventType == ActionEventEnum.mousemove.value:
                     prevX = event.x
                     prevY = event.y
             if isActionChain:
@@ -128,6 +136,13 @@ class Page(models.Model):
     screenHeight = models.IntegerField()
     url = models.URLField()
     timestamp = models.DateTimeField()
+
+    @classmethod
+    def eventsForMerge(cls, events):
+        return [(evt.timestamp, evt) for evt in events.all()]
+
+    def getAllEvents(self):
+        return heapq.merge(Page.eventsForMerge(self.actionEvents), Page.eventsForMerge(self.insertedOrDeleteds), Page.eventsForMerge(self.modifiedAttributes))
 
     def getHtmlUrl(self):
         return 'file:///sites/%d.html' % self.id
@@ -217,9 +232,39 @@ class ModifiedAttribute(models.Model):
     attributeName = models.CharField(max_length=128)
     oldValue = models.CharField(max_length=1024)
     newValue = models.CharField(max_length=1024)
+    timestamp = models.DateTimeField()
 
     def getSeleniumCommand(self):
-        return 'execute_script("document.querySelector(%s)")' % target
+        attributeName = "className" if self.attributeName == "class" else self.attributeName
+        return 'driver.execute_script(\'document.querySelector(\"%s\").%s = %s;\')' % (
+            self.target, attributeName, self.newValue.replace('"', '\"'))
+
+    def __str__(self):
+        return self.getSeleniumCommand()
+
+    def __unicode__(self):
+        return str(self)
 
     class Meta:
         ordering = ['timestamp']
+
+class InsertedOrDeleted(models.Model):
+    page = models.ForeignKey(Page, related_name='insertedOrDeleteds', on_delete=models.CASCADE)
+    target = models.CharField(max_length=1024)
+    isInserted = models.BooleanField(default=True)
+    innerHTML = models.TextField()
+    timestamp = models.DateTimeField()
+
+    def getSeleniumCommand(self):
+        return 'driver.execute_script(\'document.querySelector(\"%s\").innerHTML = %s;\')' % (
+            self.target, processHtml(self.page.url, self.innerHTML))
+
+    def __str__(self):
+        return self.getSeleniumCommand()
+
+    def __unicode__(self):
+        return str(self)
+
+    class Meta:
+        ordering = ['timestamp']
+

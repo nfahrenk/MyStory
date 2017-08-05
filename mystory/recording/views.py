@@ -5,15 +5,14 @@ from __future__ import unicode_literals
 from django.http import JsonResponse, HttpResponse
 from django.views import View
 from recording.models import Session, Page
-from recording.forms import SessionForm, PageForm, ActionEventForm
+from recording.forms import SessionForm, PageForm, ActionEventForm, ModifiedAttributeForm, InsertedOrDeletedForm
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from urlparse import urlparse
 from mystory.settings import BASE_DIR
 import os, json
-from bs4 import BeautifulSoup
-from urlparse import urljoin
 from django.shortcuts import render
+from parsePage import processHtml
 
 def cors(func):
     """
@@ -24,18 +23,6 @@ def cors(func):
         response['Access-Control-Allow-Origin'] = 'http://localhost:8000'
         return response
     return funcWrapper
-
-def processHtml(url, contents):
-    # Remove all script tags and replace links with absolute links
-    soup = BeautifulSoup(contents)
-    for match in soup.findAll('script'):
-        match.decompose()
-    for tag in soup.findAll():
-        if tag.get('href'):
-            tag['href'] = urljoin('http://publy.nickfahrenkrog.me/', tag['href'])
-        elif tag.get('src'):
-            tag['src'] = urljoin('http://publy.nickfahrenkrog.me/', tag['src'])
-    return str(soup)
 
 def jsView(request):
     abspath = os.path.join(BASE_DIR, 'static', 'js', 'mystory.js')
@@ -113,13 +100,13 @@ class EventsView(View):
         url = request.POST.get('url')
         session = getSession(sessionId, url)
         if not session:
-            return JsonResponse({'errors': [{'sessionId': 'Not a valid session id'}]}, status=404)
-        actionEvents = json.loads(request.POST.get('actionEvents', []))
+            return JsonResponse({'errors': [{'sessionId': 'Not a valid session id'}]}, status=404)        
         page = Page.objects.filter(session__id=sessionId, url=url).order_by('-timestamp')
         if not page.exists():
             return JsonResponse({'errors': [{'page': 'Page not previously initialized'}]}, status=404)
         page = page.first()
         errors = []
+        actionEvents = json.loads(request.POST.get('actionEvents', []))
         for event in actionEvents:
             form = ActionEventForm(event)
             if form.is_valid():
@@ -129,6 +116,26 @@ class EventsView(View):
                 action.save()
             else:
                 eventStr = str(event.get('eventType')) + ' - ' + event.get('timestamp')
+                errors.append({eventStr: form.errors})
+        modifiedAttributes = json.loads(request.POST.get('modifiedAttributes', []))
+        for event in modifiedAttributes:
+            form = ModifiedAttributeForm(event)
+            if form.is_valid():
+                action = form.save(commit=False)
+                action.page = page
+                action.save()
+            else:
+                eventStr = 'Modified attribute - ' + event.get('timestamp')
+                errors.append({eventStr: form.errors})
+        insertedOrDeleted = json.loads(request.POST.get('insertedOrDeleted', []))
+        for event in insertedOrDeleted:
+            form = InsertedOrDeletedForm(event)
+            if form.is_valid():
+                action = form.save(commit=False)
+                action.page = page
+                action.save()
+            else:
+                eventStr = 'Inserted or deleted - ' + event.get('timestamp')
                 errors.append({eventStr: form.errors})
         if errors:
             print errors

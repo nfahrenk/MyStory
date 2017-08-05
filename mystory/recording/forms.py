@@ -1,5 +1,5 @@
 from django.forms import ModelForm, IntegerField, CharField, DateTimeField, ValidationError
-from recording.models import Session, Page, ActionEvent, ActionEventEnum
+from recording.models import Session, Page, ActionEvent, ActionEventEnum, ModifiedAttribute, InsertedOrDeleted
 
 class SessionForm(ModelForm):
     timestamp = DateTimeField(input_formats=['%a, %d %b %Y %H:%M:%S %Z %f'])
@@ -34,3 +34,17 @@ class ActionEventForm(ModelForm):
     class Meta:
         model = ActionEvent
         fields = ['key', 'x', 'y', 'target', 'timestamp']
+
+class ModifiedAttributeForm(ModelForm):
+    timestamp = DateTimeField(input_formats=['%a, %d %b %Y %H:%M:%S %Z %f'])
+
+    class Meta:
+        model = ModifiedAttribute
+        fields = ['attributeName', 'oldValue', 'newValue', 'target', 'timestamp']
+
+class InsertedOrDeletedForm(ModelForm):
+    timestamp = DateTimeField(input_formats=['%a, %d %b %Y %H:%M:%S %Z %f'])
+
+    class Meta:
+        model = InsertedOrDeleted
+        fields = ['isInserted', 'innerHTML', 'target', 'timestamp']

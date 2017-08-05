@@ -333,6 +333,7 @@ var actionEnum = {
     keypress: 7,
     mousemove: 8
 };
+YS.selectorGenerator = new CssSelectorGenerator();
 YS.actionEvents = [];
 YS.modifiedAttributes = [];
 YS.insertedOrDeleted = [];
@@ -416,10 +417,7 @@ YS.record = function() {
                 if ((evt.type == 'keypress' && !isHoldKey) || (isKeyboardEvent && isHoldKey)) {
                     YS.actionEvents.push({'eventType': actionEnum[evt.type], 'key': evt.key, 'timestamp': YS.timestamp()});
                 } else if (!isKeyboardEvent) {
-                    // console.log(evt.target);
-                    my_selector_generator = new CssSelectorGenerator();
-                    var targetSelector = my_selector_generator.getSelector(evt.target);
-                    YS.actionEvents.push({'eventType': actionEnum[evt.type], 'timestamp': YS.timestamp(), 'target': targetSelector});
+                    YS.actionEvents.push({'eventType': actionEnum[evt.type], 'timestamp': YS.timestamp(), 'target': YS.selectorGenerator.getSelector(evt.target)});
                 }
             },
             bindEvents = function (eventName) {
@@ -495,10 +493,19 @@ YS.record = function() {
         }
     })();    
 
+    var prevInsertedOrDeleted = {
+        timestamp: Date.now(),
+        target: null
+    };
     var insertedOrDeletedCallback = function(allmutations) {
         allmutations.map( function(mr) {
-            console.log(mr);
-            YS.insertedOrDeleted.push({timestamp: YS.timestamp(), type: mr.type, target: mr.target});
+            var target = YS.selectorGenerator.getSelector(mr.target);
+            var timestampNow = Date.now();
+            if (prevInsertedOrDeleted.target !== target || prevInsertedOrDeleted.timestamp - timestampNow > 500) {
+                YS.insertedOrDeleted.push({timestamp: YS.timestamp(), isInserted: mr.addedNodes.length > mr.removedNodes.length, target: target, innerHTML: mr.target.innerHTML});
+            }
+            prevInsertedOrDeleted.target = target;
+            prevInsertedOrDeleted.timestamp = timestampNow;
         });
     },
     insertedOrDeletedObserver = new MutationObserver(insertedOrDeletedCallback),
@@ -508,8 +515,18 @@ YS.record = function() {
     };
     var modifiedAttributesCallback = function(allmutations){
         allmutations.map( function(mr){
-            console.log(mr);
-            YS.modifiedAttributes.push({timestamp: YS.timestamp(), oldValue: mr.oldValue});
+            var newValue;
+            switch (mr.attributeName) {
+                case "style":
+                    newValue = mr.target.style.cssText;
+                    break;
+                case "class":
+                    newValue = mr.target.classList.value;
+                    break;
+                default:
+                    newValue = mr.target[mr.attributeName];
+            }
+            YS.modifiedAttributes.push({timestamp: YS.timestamp(), oldValue: mr.oldValue, target: YS.selectorGenerator.getSelector(mr.target), attributeName: mr.attributeName, newValue: newValue});
         });
     },
     modifiedAttributesObserver = new MutationObserver(modifiedAttributesCallback),
@@ -549,38 +566,3 @@ YS.main = function() {
 };
 
 YS.main();
-
-
-
-/*
-var inserted_or_deleted = [],
-    modified_attributes = [];
-
-var inserted_or_deleted_callback = function(allmutations) {
-    allmutations.map( function(mr) {
-        console.log(mr.addedNodes);
-        inserted_or_deleted.push({timestamp: Date.now(), type: mr.type, target: mr.target});
-    });
-},
-inserted_or_deleted_observer = new MutationObserver(inserted_or_deleted_callback),
-inserted_or_deleted_options = {
-    'childList': true,
-    'subtree': true
-};
-var modified_attributes_callback = function(allmutations){
-    allmutations.map( function(mr){
-        console.log(mr);
-        modified_attributes.push({timestamp: Date.now(), type: mr.oldValue});
-    });
-},
-modified_attributes_observer = new MutationObserver(modified_attributes_callback),
-modified_attributes_options = {
-    'attributes': true,
-    'attributeOldValue': true,
-    'subtree': true
-};
-
-inserted_or_deleted_observer.observe(document.body, inserted_or_deleted_options);
-modified_attributes_observer.observe(document.body, modified_attributes_options);
-*/
-
